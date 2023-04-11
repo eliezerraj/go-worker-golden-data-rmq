@@ -19,9 +19,8 @@ var (
 
 	configRabbitMQ 		core.ConfigRabbitMQ
 	envDB	 			core.DatabaseRDS
-	configDB 			db_postgre.DatabaseHelper
+	dataBaseHelper 		db_postgre.DatabaseHelper
 	repoDB				db_postgre.WorkerRepository
-	//workerService		service.WorkerService
 )
 
 func init(){
@@ -123,16 +122,15 @@ func main()  {
 	log.Debug().Msg("--------------------")
 	
 	count := 1
+	var err error
 
 	for {
-		configDB, err := db_postgre.NewDatabaseHelper(envDB)
+		dataBaseHelper, err = db_postgre.NewDatabaseHelper(envDB)
 		if err != nil {
 			if count < 3 {
 				log.Error().Err(err).Msg("Erro na abertura do Database")
-				//log.Printf("Erro na abertura do Database try %v ... err: %v",count ,err)
 			} else {
 				log.Error().Err(err).Msg("EERRO FATAL na abertura do Database aborting")
-				//log.Printf("ERRO FATAL na abertura do Database aborting try %v ... err: %v", count ,err)
 				panic(err)	
 			}
 			time.Sleep(3 * time.Second)
@@ -140,19 +138,16 @@ func main()  {
 			continue
 		}
 		break
-		repoDB = db_postgre.NewWorkerRepository(configDB)
 	}
 
-	workerService := service.NewWorkerService(repoDB)
+	repoDB 			= db_postgre.NewWorkerRepository(dataBaseHelper)
+	workerService 	:= service.NewWorkerService(&repoDB)
 
-	consumer, err := notification.NewConsumerService(&configRabbitMQ)
+	consumer, err := notification.NewConsumerService(&configRabbitMQ, workerService)
 	if err != nil {
-		log.Error().Err(err).Msg("error message")
+		log.Error().Err(err).Msg("error create notification.NewConsumerService")
 		os.Exit(3)
 	}
 
-	log.Debug().Interface("consumer",consumer).Msg("main consumer")
-	
 	consumer.ConsumerQueue()
-	
 }

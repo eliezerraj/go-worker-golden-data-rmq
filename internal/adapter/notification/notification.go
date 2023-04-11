@@ -7,6 +7,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/go-worker-golden-data-rmq/internal/core"
+	"github.com/go-worker-golden-data-rmq/internal/service"
 
 )
 
@@ -16,11 +17,13 @@ var (
 )
 
 type ConsumerService struct{
-	consumer *amqp.Connection
-	configRabbitMQ *core.ConfigRabbitMQ
+	consumer 		*amqp.Connection
+	configRabbitMQ 	*core.ConfigRabbitMQ
+	workerService	*service.WorkerService
 }
 
-func NewConsumerService(configRabbitMQ *core.ConfigRabbitMQ) (*ConsumerService, error){
+func NewConsumerService(configRabbitMQ *core.ConfigRabbitMQ,
+						workerService  *service.WorkerService) (*ConsumerService, error){
 	childLogger.Debug().Msg("NewConsumerService")
 
 	rabbitmqURL := "amqp://" + configRabbitMQ.User + ":" + configRabbitMQ.Password + "@" + configRabbitMQ.Port
@@ -31,8 +34,9 @@ func NewConsumerService(configRabbitMQ *core.ConfigRabbitMQ) (*ConsumerService, 
 		return nil, err
 	}
 	return &ConsumerService{
-		consumer: conn,
+		consumer: 		conn,
 		configRabbitMQ: configRabbitMQ,
+		workerService: 	workerService,
 	}, nil
 }
 
@@ -81,6 +85,9 @@ func (c *ConsumerService) ConsumerQueue() error {
 		for d := range msgs {
 			childLogger.Debug().Msg("++++++++++++++++++++++++++++")
 			childLogger.Debug().Str("msg.Body:", string(d.Body)).Msg(" Success Receive a message (ConsumerQueue) ") 
+			
+			c.workerService.DataEnrichment()
+
 			time.Sleep(time.Duration(c.configRabbitMQ.TimeDeleyQueue) * time.Millisecond)
 		}
 	}()

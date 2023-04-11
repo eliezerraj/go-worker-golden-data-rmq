@@ -2,65 +2,67 @@ package db_postgre
 
 import (
 	"context"
-	"time"
-	"fmt"
-	"database/sql"
 
 	_ "github.com/lib/pq"
-	"github.com/rs/zerolog/log"
 
 	"github.com/go-worker-golden-data-rmq/internal/core"
+	"github.com/go-worker-golden-data-rmq/internal/erro"
 
 )
 
-var childLogger = log.With().Str("repository/db_postgre", "NewDatabaseHelper").Logger()
-
-type DatabaseHelper interface {
-	GetConnection(ctx context.Context) (*sql.DB, error)
-	CloseConnection()
+type WorkerRepository struct {
+	databaseHelper DatabaseHelper
 }
 
-type DatabaseHelperImpl struct {
-	client   	*sql.DB
-	timeout		time.Duration
+func NewWorkerRepository(databaseHelper DatabaseHelper) WorkerRepository {
+	childLogger.Debug().Msg("NewWorkerRepository")
+	return WorkerRepository{
+		databaseHelper: databaseHelper,
+	}
 }
 
-func (d DatabaseHelperImpl) GetConnection(ctx context.Context) (*sql.DB, error) {
-	childLogger.Debug().Msg("GetConnection")
-	return d.client, nil
-}
+//---------------------------
 
-func (d DatabaseHelperImpl) CloseConnection()  {
-	childLogger.Debug().Msg("CloseConnection")
-	defer d.client.Close()
-}
+func (w WorkerRepository) Ping() (bool, error) {
+	childLogger.Debug().Msg("++++++++++++++++++++++++++++++++")
+	childLogger.Debug().Msg("Ping")
+	childLogger.Debug().Msg("++++++++++++++++++++++++++++++++")
 
-func NewDatabaseHelper(databaseRDS core.DatabaseRDS) (DatabaseHelper, error) {
-	childLogger.Debug().Msg("NewDatabaseHelper")
-
-	_ , cancel := context.WithTimeout(context.Background(), time.Duration(databaseRDS.Db_timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1000)
 	defer cancel()
 
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", 
-							databaseRDS.User, 
-							databaseRDS.Password, 
-							databaseRDS.Host, 
-							databaseRDS.Port, 
-							databaseRDS.DatabaseName) 
-	
-	//fmt.Println("==========>", databaseRDS.Postgres_Driver, connStr)
-
-	client, err := sql.Open(databaseRDS.Postgres_Driver, connStr)
+	client, _ := w.databaseHelper.GetConnection(ctx)
+	err := client.Ping()
 	if err != nil {
-		return DatabaseHelperImpl{}, err
-	}
-	err = client.Ping()
-	if err != nil {
-		return DatabaseHelperImpl{}, err
+		return false, erro.ErrConnectionDatabase
 	}
 
-	return DatabaseHelperImpl{
-		client: client,
-		timeout:  time.Duration(databaseRDS.Db_timeout) * time.Second,
-	}, nil
+	return true, nil
+}
+
+func (w WorkerRepository) GetPerson(id string) (core.Person, error){
+	childLogger.Debug().Msg("++++++++++++++++++++++++++++++++")
+	childLogger.Debug().Msg("GetPerson")
+	childLogger.Debug().Msg("++++++++++++++++++++++++++++++++")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1000)
+	defer cancel()
+
+	client, _ := w.databaseHelper.GetConnection(ctx)
+	person := core.Person{}
+
+	rows, err := client.Query(`SELECT id, email FROM person WHERE id = $1`, id)
+	defer rows.Close()
+	if err != nil {
+		return person, erro.ErrConnectionDatabase
+	}
+	for rows.Next() {
+		err := rows.Scan( &person.ID, &person.Email )
+		if err != nil {
+			return person , erro.ErrNotFound
+        }
+		return person, nil
+	}
+
+	return person , erro.ErrNotFound
 }
