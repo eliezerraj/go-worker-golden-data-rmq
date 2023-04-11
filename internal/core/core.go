@@ -15,7 +15,7 @@ type Message struct {
 	Person	Person	`json:"person,omitempty"`
 }
 
-//Person Constructor
+//Person Message
 func NewMessage(id string, key string, origin string ,person Person) *Message{
 	return &Message{
 		ID:	id,
@@ -53,4 +53,18 @@ type DatabaseRDS struct {
 	Password			string `json:"password"`
 	Db_timeout			int	`json:"db_timeout"`
 	Postgres_Driver		string `json:"postgres_driver"`
+}
+
+type WebHook struct {
+	ID		string	`json:"id,omitempty"`
+	Email	string	`json:"email,omitempty"`
+	URL		string	`json:"url,omitempty"`
+}
+
+func NewWebHook(id string, email string, url string) *WebHook {
+	return &WebHook{
+		ID:	id,
+		Email: email,
+		URL: url,
+	}
 }

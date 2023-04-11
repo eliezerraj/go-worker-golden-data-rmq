@@ -7,7 +7,8 @@ import(
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/go-worker-golden-data-rmq/internal/adapter/notification"
+	"github.com/go-worker-golden-data-rmq/internal/adapter/notification/consumer"
+	"github.com/go-worker-golden-data-rmq/internal/adapter/notification/producer"
 	"github.com/go-worker-golden-data-rmq/internal/repository/db_postgre"
 	"github.com/go-worker-golden-data-rmq/internal/core"
 	"github.com/go-worker-golden-data-rmq/internal/service"
@@ -17,7 +18,8 @@ var (
 	logLevel		=	zerolog.DebugLevel // InfoLevel DebugLevel
 	version			=	"go-worker-golden-data-rmq"
 
-	configRabbitMQ 		core.ConfigRabbitMQ
+	configRMQConsumer 	core.ConfigRabbitMQ
+	configRMQProducer	core.ConfigRabbitMQ
 	envDB	 			core.DatabaseRDS
 	dataBaseHelper 		db_postgre.DatabaseHelper
 	repoDB				db_postgre.WorkerRepository
@@ -27,11 +29,17 @@ func init(){
 	log.Debug().Msg("init")
 	zerolog.SetGlobalLevel(logLevel)
 
-	configRabbitMQ.User = "guest"
-	configRabbitMQ.Password = "guest"
-	configRabbitMQ.Port = "localhost:5672/"
-	configRabbitMQ.QueueName = "queue_person_quorum"
-	configRabbitMQ.TimeDeleyQueue = 500
+	configRMQConsumer.User = "guest"
+	configRMQConsumer.Password = "guest"
+	configRMQConsumer.Port = "localhost:5672/"
+	configRMQConsumer.QueueName = "queue_person_quorum"
+	configRMQConsumer.TimeDeleyQueue = 500
+
+	configRMQProducer.User = "guest"
+	configRMQProducer.Password = "guest"
+	configRMQProducer.Port = "localhost:5672/"
+	configRMQProducer.QueueName = "queue_webhook_quorum"
+	configRMQProducer.TimeDeleyQueue = 500
 
 	envDB.Host = "host.docker.internal"
 	envDB.Port = "5432"
@@ -61,20 +69,20 @@ func getEnv() {
 		version = os.Getenv("VERSION")
 	}
 	if os.Getenv("RMQ_USER") !=  "" {
-		configRabbitMQ.User = os.Getenv("RMQ_USER")
+		configRMQConsumer.User = os.Getenv("RMQ_USER")
 	}
 	if os.Getenv("RMQ_PASS") !=  "" {
-		configRabbitMQ.Password = os.Getenv("RMQ_PASS")
+		configRMQConsumer.Password = os.Getenv("RMQ_PASS")
 	}
 	if os.Getenv("RMQ_PORT") !=  "" {
-		configRabbitMQ.Port = os.Getenv("RMQ_PORT")
+		configRMQConsumer.Port = os.Getenv("RMQ_PORT")
 	}
 	if os.Getenv("RMQ_QUEUE") !=  "" {
-		configRabbitMQ.QueueName = os.Getenv("RMQ_QUEUE")
+		configRMQConsumer.QueueName = os.Getenv("RMQ_QUEUE")
 	}
 	if os.Getenv("TIME_DELAY_QUEUE") !=  "" {
 		intVar, _ := strconv.Atoi(os.Getenv("TIME_DELAY_QUEUE"))
-		configRabbitMQ.TimeDeleyQueue = intVar
+		configRMQConsumer.TimeDeleyQueue = intVar
 	}
 
 	if os.Getenv("DB_HOST") !=  "" {
@@ -109,21 +117,15 @@ func getEnv() {
 func main()  {
 	log.Debug().Msg("main")
 	log.Debug().Msg("-------------------")
-	log.Debug().Str("version", version).
-				Msg("Enviroment Variables")
-	log.Debug().Str("configRabbitMQ.User: ", configRabbitMQ.User).
-				Msg("-----")
-	log.Debug().Str("configRabbitMQ.Password: ", configRabbitMQ.Password).
-				Msg("-----")
-	log.Debug().Str("configRabbitMQ.Port :", configRabbitMQ.Port).
-				Msg("----")
-	log.Debug().Str("configRabbitMQ.QueueName :", configRabbitMQ.QueueName).
-				Msg("----")
+	log.Debug().Str("version", version).Msg("Enviroment Variables")
+	log.Debug().Str("configRabbitMQ.User: ", configRMQConsumer.User).Msg("")
+	log.Debug().Str("configRabbitMQ.Password: ", configRMQConsumer.Password).Msg("")
+	log.Debug().Str("configRabbitMQ.Port :", configRMQConsumer.Port).Msg("")
+	log.Debug().Str("configRabbitMQ.QueueName :", configRMQConsumer.QueueName).Msg("")
 	log.Debug().Msg("--------------------")
 	
 	count := 1
 	var err error
-
 	for {
 		dataBaseHelper, err = db_postgre.NewDatabaseHelper(envDB)
 		if err != nil {
@@ -139,15 +141,21 @@ func main()  {
 		}
 		break
 	}
+	repoDB = db_postgre.NewWorkerRepository(dataBaseHelper)
 
-	repoDB 			= db_postgre.NewWorkerRepository(dataBaseHelper)
-	workerService 	:= service.NewWorkerService(&repoDB)
+	producer, err := producer.NewRMQNotification(&configRMQProducer)
+	if err != nil {
+		log.Error().Err(err).Msg("error create producer notification.NewRMQNotification")
+		os.Exit(3)
+	}
+	workerService := service.NewWorkerService(&repoDB, producer)
 
-	consumer, err := notification.NewConsumerService(&configRabbitMQ, workerService)
+	consumer, err := consumer.NewConsumerService(&configRMQConsumer, workerService)
 	if err != nil {
 		log.Error().Err(err).Msg("error create notification.NewConsumerService")
 		os.Exit(3)
 	}
 
 	consumer.ConsumerQueue()
+
 }
