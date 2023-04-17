@@ -32,20 +32,29 @@ func (s *WorkerService) DataEnrichment(id string) error{
 	childLogger.Debug().Str("id : ", id).Msg("")
 	childLogger.Debug().Msg("---------------------------")
 
-	ids := "1"
-	result, err := s.workerRepository.GetPerson(ids)
+	result, err := s.workerRepository.GetPerson(id)
 	if err != nil {
 		log.Error().Err(err).Msg("error workerRepository.GetPerson")
+		return err
 	}
-
 	//log.Debug().Interface("result",result).Msg("")
 
 	url := "https://my-webhook.com.br/" + id
-	webHook := core.NewWebHook(id, result.Email, url)
 
+	webHook := core.NewWebHook(id, result.Email, url)
 	log.Debug().Interface("webHook : ",webHook).Msg("")
 
-	s.producerRMQNotification.ProducerQueue(webHook)
+	err = s.producerRMQNotification.ProducerQueue(webHook)
+	if err != nil {
+		log.Error().Err(err).Msg("error producerRMQNotification.ProducerQueue")
+		return err
+	}
+
+	err = s.workerRepository.AddWebHook(*webHook)
+	if err != nil {
+		log.Error().Err(err).Msg("error workerRepository.AddWebHook")
+		return err
+	}
 
 	return nil
 }

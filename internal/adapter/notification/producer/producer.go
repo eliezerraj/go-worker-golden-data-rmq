@@ -4,7 +4,6 @@ import (
 	"time"
 	"context"
 	"encoding/json"
-	"fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog/log"
@@ -97,68 +96,4 @@ func (n *RMQNotification) ProducerQueue(msg *core.WebHook) error {
 	childLogger.Debug().Str("msg :", string(body)).Msg("Success Publish a message (ProducerQueue)")
 
 	return nil	
-}
-
-func (n *RMQNotification) ConsumerQueue2() error {
-	childLogger.Debug().Msg("ConsumerQueue")
-
-	ch, err := n.rmqConnection.Channel()
-	if err != nil {
-		childLogger.Error().Err(err).Msg("error channel the server message") 
-		return err
-	}
-	defer ch.Close()
-
-	args := amqp.Table{ // queue args
-		amqp.QueueTypeArg: amqp.QueueTypeQuorum,
-	}
-	q, err := ch.QueueDeclare(	n.configRabbitMQ.QueueName, // name
-								true,         // durable
-								false,        // delete when unused
-								false,        // exclusive
-								false,        // no-wait
-								args,          // arguments
-	)
-	if err != nil {
-		childLogger.Error().Err(err).Msg("error declare queue !!!!") 
-		return err
-	}
-
-	msgs, err := ch.Consume(	q.Name, // queue
-								consumer_name,    // consumer
-								true,   // auto-ack
-								false,  // exclusive
-								false,  // no-local
-								false,  // no-wait
-								nil,    // args
-	)
-	if err != nil {
-		childLogger.Error().Err(err).Msg("error consume message") 
-		return err
-	}
-	
-	var forever chan struct{}
-
-	childLogger.Debug().Msg("Starting Consumer...")
-	go func() {
-		for d := range msgs {
-			childLogger.Debug().Msg("++++++++++++++++++++++++++++")
-			//childLogger.Debug().Str("msg.Body:", string(d.Body)).Msg("Success Receive a message (ConsumerQueue)") 
-
-			var data map[string]interface{}
-			err := json.Unmarshal([]byte(d.Body), &data)
-			if err != nil {
-				childLogger.Error().Err(err).Msg("error Unmarshal")
-			}
-
-			//fmt.Println("==== data[ID] ====> ", data["ID"] )
-			id_str := fmt.Sprintf("%v", data["ID"])
-			//n.workerService.DataEnrichment(id_str)
-			fmt.Println("==== data[ID] ====> ", id_str )
-			time.Sleep(time.Duration(n.configRabbitMQ.TimeDeleyQueue) * time.Millisecond)
-		}
-	}()
-	<-forever
-
-	return nil
 }

@@ -85,17 +85,25 @@ func (c *ConsumerService) ConsumerQueue() error {
 	childLogger.Debug().Msg("Starting Consumer...")
 	go func() {
 		for d := range msgs {
-			childLogger.Debug().Msg("++++++++++++++++++++++++++++")
-			//childLogger.Debug().Str("msg.Body:", string(d.Body)).Msg("Success Receive a message (ConsumerQueue)") 
+			childLogger.Debug().Msg("****************************************")
+			childLogger.Debug().Str("msg.Body:", string(d.Body)).Msg("Success Receive a message (ConsumerQueue)") 
 
 			var data map[string]interface{}
+
 			err := json.Unmarshal([]byte(d.Body), &data)
 			if err != nil {
 				childLogger.Error().Err(err).Msg("error Unmarshal")
 			}
 
-			//fmt.Println("==== data[ID] ====> ", data["ID"] )
-			id_str := fmt.Sprintf("%v", data["ID"])
+			/*dt :=  data["person"]
+			fmt.Println("==== data[person] ====> ", data["person"])
+			fmt.Println("==== dt ====> ", dt)
+			fmt.Println("==== data[ID] ====> ", data["ID"] )*/
+
+			person_obj := data["person"].(map[string]interface{})
+			//fmt.Println("==== person_obj.id ====> ", person_obj["id"])
+
+			id_str := fmt.Sprintf("%v", person_obj["id"])
 			c.workerService.DataEnrichment(id_str)
 
 			time.Sleep(time.Duration(c.configRabbitMQ.TimeDeleyQueue) * time.Millisecond)
